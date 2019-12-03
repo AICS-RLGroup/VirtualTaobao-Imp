@@ -7,7 +7,7 @@ from utils.utils import *
 
 
 class GanSDModel:
-    def __init__(self, dim_user, dim_seed, lr_g, lr_d, expert_users, batch_size=256, alpha=1, beta=1):
+    def __init__(self, dim_user, dim_seed, lr_g, lr_d, expert_users, batch_size=256, alpha=1.0, beta=1.0):
         self.dim_user = dim_user
         self.dim_seed = dim_seed
 
@@ -38,13 +38,13 @@ class GanSDModel:
             idx = torch.randperm(self.n_expert_users)
             for i in range(n_batch):
 
-                # sample minibatch from generator
-                batch_seed = torch.normal(torch.zeros(self.batch_size, self.dim_seed), torch.ones(self.batch_size,
-                                                                                                  self.dim_seed)) \
-                    .to(device)
-                batch_gen = self.generate(batch_seed)
                 # sample minibatch from expert users
                 batch_expert = self.expert_users[idx[i * self.batch_size:(i + 1) * self.batch_size]]
+                # sample minibatch from generator
+                batch_seed = torch.normal(torch.zeros(batch_expert.size(0), self.dim_seed),
+                                          torch.ones(batch_expert.size(0), self.dim_seed)).to(device)
+                batch_gen, _ = self.generate(batch_seed)
+
                 # gradient ascent update discriminator
                 for _ in range(1):
                     self.optim_D.zero_grad()
@@ -52,8 +52,8 @@ class GanSDModel:
                     expert_o = self.D(batch_expert.to(device))
                     gen_o = self.D(batch_gen.detach())
 
-                    d_loss = self.loss_func(expert_o, torch.ones(expert_o.shape).to(device)) + \
-                             self.loss_func(gen_o, torch.zeros(gen_o.shape).to(device))
+                    d_loss = self.loss_func(expert_o, torch.ones_like(expert_o, device=device)) + \
+                             self.loss_func(gen_o, torch.zeros_like(gen_o, device=device))
                     d_loss.backward()
 
                     self.optim_D.step()
@@ -62,26 +62,29 @@ class GanSDModel:
                 for _ in range(3):
                     self.optim_G.zero_grad()
                     # sample minibatch from generator
-                    batch_seed = torch.normal(torch.zeros(self.batch_size, self.dim_seed), torch.ones(self.batch_size,
-                                                                                                      self.dim_seed)) \
-                        .to(device)
-                    batch_gen = self.generate(batch_seed)
-                    gen_o = self.D(batch_expert.to(device))
+                    batch_seed = torch.normal(torch.zeros(batch_expert.size(0), self.dim_seed),
+                                              torch.ones(batch_expert.size(0), self.dim_seed)).to(device)
+                    batch_gen, batch_gen_feature = self.generate(batch_seed)
+                    gen_o = self.D(batch_gen.detach())
 
-                    kl = self.get_kl(batch_gen, batch_expert)
-                    g_loss = self.loss_func(gen_o, torch.ones(gen_o.shape).to(device)) + \
-                             self.alpha * self.get_prob_entropy(batch_gen)[1] - \
-                             self.beta * kl
+                    kl = self.get_kl(batch_gen_feature, batch_expert)
+                    # g_loss = -(gen_o.sum() +
+                    #          self.alpha * self.get_prob_entropy(batch_gen)[1] -
+                    #          self.beta * kl)
+                    g_loss = self.loss_func(gen_o, torch.ones_like(gen_o, device=device)) + self.beta * kl - \
+                             self.alpha * self.get_prob_entropy(batch_gen)[1]
                     g_loss.backward()
                     self.optim_G.step()
 
-                writer.add_scalars('GAN_SD/train_loss', {'discriminator_GAN_SD': d_loss, 'generator_GAN_SD': g_loss},
+                writer.add_scalars('GAN_SD/train_loss', {'discriminator_GAN_SD': d_loss,
+                                                         'generator_GAN_SD': g_loss,
+                                                         'KL_divergence': kl},
                                    epoch * n_batch + i)
 
                 if i % 10 == 0:
                     cur_time = time.time() - time_start
                     eta = cur_time / (i + 1) * (n_batch - i - 1)
-                    print('Epoch %2d Iter %4d G_Loss %.3f KL %.3f D_Loss %.3f. Time elapsed: %.2fs ETA : %.2fs' % (
+                    print('Epoch %2d Batch %4d G_Loss %.3f KL %.3f D_Loss %.3f. Time elapsed: %.2fs ETA : %.2fs' % (
                         epoch, i, g_loss.cpu().detach().numpy(), kl.cpu().detach().numpy(),
                         d_loss.cpu().detach().numpy(), cur_time, eta))
 
@@ -102,12 +105,12 @@ class GanSDModel:
         features[8] = x[:, 64:67]
         features[9] = x[:, 67:85]
         features[10] = x[:, 85:88]
-        one_hot = FLOAT([])
+        one_hot = FLOAT([]).to(device)
         for i in range(11):
             tmp = torch.zeros_like(features[i], device=device)
-            one_hot = torch.cat((one_hot.to(device), tmp.scatter_(1, torch.multinomial(features[i], 1), 1)),
+            one_hot = torch.cat((one_hot, tmp.scatter_(1, torch.multinomial(features[i], 1), 1)),
                                 dim=-1)  # 根据softmax feature 生成one-hot的feature
-        return one_hot
+        return one_hot, features
 
     def get_prob_entropy(self, x):
         features = [None] * 11
@@ -122,15 +125,14 @@ class GanSDModel:
         features[8] = x[:, 64:67]
         features[9] = x[:, 67:85]
         features[10] = x[:, 85:88]
-        entropy = 0
-        softmax_feature = FLOAT([])
+        entropy = 0.0
+        softmax_feature = FLOAT([]).to(device)
         for i in range(11):
-            softmax_feature = torch.cat([softmax_feature.to(device), F.softmax(features[i], dim=1)], dim=-1)
+            softmax_feature = torch.cat([softmax_feature, F.softmax(features[i], dim=1)], dim=-1)
             entropy += -(F.log_softmax(features[i], dim=1) * F.softmax(features[i], dim=1)).sum(dim=1).mean()
         return softmax_feature, entropy
 
-    def get_kl(self, batch_gen, batch_expert):
-        batch_gen_softmax_probs = self.get_prob_entropy(batch_gen)[0]
+    def get_kl(self, batch_gen_feature, batch_expert):
         distributions = [None] * 11
         distributions[0] = batch_expert[:, :8]
         distributions[1] = batch_expert[:, 8:16]
@@ -144,14 +146,11 @@ class GanSDModel:
         distributions[9] = batch_expert[:, 67:85]
         distributions[10] = batch_expert[:, 85:88]
 
-        batch_expert_log_softmax_probs = FLOAT([])
+        kl = 0.0
         for i in range(11):
-            batch_expert_log_softmax_probs = torch.cat([batch_expert_log_softmax_probs, F.log_softmax(distributions[i],
-                                                                                                      dim=1)], dim=-1)
-        kl = FLOAT([0.0]).to(device)
-        for i in range(11):
-            kl += (batch_gen_softmax_probs[i] * (
-                    batch_gen_softmax_probs[i].log() - batch_expert_log_softmax_probs[i].to(device))).mean()
+            kl += (F.softmax(batch_gen_feature[i].to(device), dim=1) *
+                   (F.log_softmax(batch_gen_feature[i].to(device), dim=1) -
+                    F.log_softmax(distributions[i].to(device), dim=1))).sum(dim=1).mean()
 
         return kl
 
