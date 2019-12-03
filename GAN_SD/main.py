@@ -5,6 +5,7 @@ import click
 
 from GAN_SD.Gan_SD import GanSDModel
 from data_loader import load_dataset
+from utils.utils import *
 
 
 @click.command()
@@ -16,14 +17,19 @@ from data_loader import load_dataset
               help='Learning rate for Discriminator')
 @click.option('--alpha', type=float, default=1.0, help='Coefficient for Entropy Loss')
 @click.option('--beta', type=float, default=1.0, help='Coefficient for KL divergence')
-def main(dataset_path, dim_seed, batch_size, lr_g, lr_d, alpha, beta):
+@click.option('--seed', type=int, default=2019, help='Random seed for reproduce')
+def main(dataset_path, dim_seed, batch_size, lr_g, lr_d, alpha, beta, seed):
     """
     Train GAN-SD for generating human-like user features
     """
     dim_user = 88
     dim_seed = dim_seed
     expert_user_features = load_dataset(dataset_path)[0]
-    model = GanSDModel(dim_user, dim_seed, lr_g, lr_d, expert_user_features, batch_size=batch_size, alpha=alpha, beta=beta)
+
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    model = GanSDModel(dim_user, dim_seed, lr_g, lr_d, expert_user_features, batch_size=batch_size, alpha=alpha,
+                       beta=beta)
     model.train()
 
 
