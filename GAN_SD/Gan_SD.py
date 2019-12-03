@@ -32,6 +32,7 @@ class GanSDModel:
         n_batch = (self.n_expert_users + self.batch_size - 1) // self.batch_size
 
         time_start = time.time()
+        writer = SummaryWriter()
 
         for epoch in range(1000):
             idx = torch.randperm(self.n_expert_users)
@@ -57,8 +58,6 @@ class GanSDModel:
 
                     self.optim_D.step()
 
-                # writer.add_scalar('discriminator_GAN_SD', d_loss, epoch*n_batch+i)
-
                 # gradient ascent update generator
                 for _ in range(3):
                     self.optim_G.zero_grad()
@@ -76,7 +75,9 @@ class GanSDModel:
                     g_loss.backward()
                     self.optim_G.step()
 
-                    # writer.add_scalar('generator_loss', g_loss, epoch*n_batch+i)
+                writer.add_scalars('GAN_SD/train_loss', {'discriminator_GAN_SD': d_loss, 'generator_GAN_SD': g_loss},
+                                   epoch * n_batch + i)
+
                 if i % 10 == 0:
                     cur_time = time.time() - time_start
                     eta = cur_time / (i + 1) * (n_batch - i - 1)
@@ -150,7 +151,7 @@ class GanSDModel:
         kl = FLOAT([0.0]).to(device)
         for i in range(11):
             kl += (batch_gen_softmax_probs[i] * (
-                    batch_gen_softmax_probs[i].log() - batch_expert_log_softmax_probs[i].to(device))).sum()
+                    batch_gen_softmax_probs[i].log() - batch_expert_log_softmax_probs[i].to(device))).mean()
 
         return kl
 

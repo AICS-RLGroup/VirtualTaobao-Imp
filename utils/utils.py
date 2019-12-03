@@ -9,11 +9,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 INT = torch.IntTensor
 LONG = torch.LongTensor
 BYTE = torch.ByteTensor
 FLOAT = torch.FloatTensor
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
