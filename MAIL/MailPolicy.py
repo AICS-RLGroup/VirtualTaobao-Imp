@@ -59,7 +59,7 @@ class MailPolicy(nn.Module):
     def get_user_action(self, user_state):
         action_prob = self.get_user_action_prob(user_state)
         action = torch.multinomial(action_prob, 1)
-        return action
+        return action, action_prob
 
     def get_user_leave_action(self, user):
         x = self.UserLeavePolicy(user)
@@ -91,8 +91,11 @@ class MailPolicy(nn.Module):
                 s_c = torch.cat((s, a))
 
                 page_index += 1
+            trajectory.append(tao_j)
         return trajectory
-    
 
     def get_log_prob(self, user_state, user_action):
-        pass
+        _, action_prob = self.get_user_action(user_state)
+        current_action_prob = action_prob[:, user_action]
+
+        return torch.log(current_action_prob.unsqueeze(1))
