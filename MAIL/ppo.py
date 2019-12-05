@@ -20,7 +20,7 @@ def GAE(reward, value, mask, gamma, lam):
     return adv, returns
 
 
-def PPO_step(state, action, reward, old_log_prob, policy, value, policy_optim, value_optim):
+def PPO_step(state, action, reward, old_log_prob, policy, value, policy_optim, value_optim, epsilon):
     value_o = value(state.detach())
     done = action[:, 5:].detach()
     advantage, returns = GAE(reward.detach(), value_o.detach(), done, gamma=0.95, lam=0.95)
