@@ -74,7 +74,7 @@ class MailPolicy(nn.Module):
             # sample user from GAN-SD distribution
             s, _ = self.UserModel.generate()
             # get user's leave page index from leave model
-            leave_page_index = self.UserLeaveModel(s)
+            leave_page_index = self.get_user_leave_action(s)
             # get engine action from user with request
             a = self.EnginePolicy(s)
 
