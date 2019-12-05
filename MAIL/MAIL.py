@@ -49,7 +49,7 @@ class MailModel:
 
                     while page_index != leave_page_index:  # terminate condition
                         s_c = torch.cat((s_c, FLOAT(page_index)).to(device), dim=1)
-                        a_c = self.UserPolicy(s_c)
+                        a_c = self.UserPolicy.get_action(s_c)
                         tao_j.append(torch.cat((s_c, a_c), dim=1))
 
                         # genreate new customer state
