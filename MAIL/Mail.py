@@ -71,7 +71,7 @@ class MailModel:
                     self.optim_D.step()
 
                 # PPO update joint policy
-                with torch.no_grad:
+                with torch.no_grad():
                     gen_r = self.D(batch_gen)
                     value_o = self.V(batch_gen)
                     fixed_log_prob = self.G.get_log_prob(batch_gen[:, :-1], batch_gen[:, -1])
