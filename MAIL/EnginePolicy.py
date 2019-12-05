@@ -1,9 +1,9 @@
 from utils.utils import *
 
 
-class EngineModel(nn.Module):
+class EnginePolicy(nn.Module):
     def __init__(self, n_input=88, n_hidden=256, n_output=27, activation=nn.LeakyReLU):
-        super(EngineModel, self).__init__()
+        super(EnginePolicy, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(n_input, n_hidden),
             activation(),

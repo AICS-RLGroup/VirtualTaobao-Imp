@@ -11,8 +11,8 @@ from utils.utils import *
 @click.command()
 @click.option('--dataset_path', type=click.Path('r'), default='../data/dataset.txt')
 @click.option('--dim_seed', type=int, default=128, help='Seed dimension for Generator of GAN-SD')
-@click.option('--batch_size', type=int, default=256, help='Batch size for GAN-SD')
-@click.option('--learning_rate_generator', 'lr_g', type=float, default=0.0005, help='Learning rate for Generator')
+@click.option('--batch_size', type=int, default=128, help='Batch size for GAN-SD')
+@click.option('--learning_rate_generator', 'lr_g', type=float, default=0.001, help='Learning rate for Generator')
 @click.option('--learning_rate_discriminator', 'lr_d', type=float, default=0.0001,
               help='Learning rate for Discriminator')
 @click.option('--alpha', type=float, default=1.0, help='Coefficient for Entropy Loss')

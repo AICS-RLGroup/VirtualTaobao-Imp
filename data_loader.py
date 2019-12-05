@@ -21,5 +21,28 @@ def load_dataset(path=None):
     return features, labels, clicks
 
 
+def load_expert_trajectories(path=None):
+    if path is None:
+        path = dataset_path
+
+    expert_trajectories = []
+    with open(path, 'r') as file:
+        cur_trajectory = []
+
+        for line in file:
+            line = line.replace('\t', ',')
+            data = line.split(',')
+            cur_page_index = data[90]
+            if float(cur_page_index) == 1.0 and len(cur_trajectory) > 0:
+                expert_trajectories.append(FLOAT(cur_trajectory))
+                cur_trajectory = []
+
+            data = data[0:88] + data[91:91 + 27] + [data[90]] + [data[88]]
+            cur_trajectory.append(([float(x) for x in data]))
+
+    return expert_trajectories
+
+
 if __name__ == '__main__':
-    load_dataset()
+    # load_dataset()
+    expert_data = load_expert_trajectories()

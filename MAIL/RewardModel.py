@@ -2,7 +2,7 @@ from utils.utils import *
 
 
 class RewardModel(nn.Module):
-    def __init__(self, n_input=88+27, n_hidden=256, n_output=1, activation=nn.LeakyReLU):
+    def __init__(self, n_input=88 + 27 + 1 + 1, n_hidden=256, n_output=1, activation=nn.LeakyReLU):
         super(RewardModel, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(n_input, n_hidden),

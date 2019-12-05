@@ -59,7 +59,7 @@ class GanSDModel:
                     self.optim_D.step()
 
                 # gradient ascent update generator
-                for _ in range(3):
+                for _ in range(10):
                     self.optim_G.zero_grad()
                     # sample minibatch from generator
                     batch_seed = torch.normal(torch.zeros(batch_expert.size(0), self.dim_seed),
