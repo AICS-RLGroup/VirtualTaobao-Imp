@@ -91,6 +91,8 @@ class MailPolicy(nn.Module):
                 s_c = torch.cat((s, a))
 
                 page_index += 1
+        return trajectory
+    
 
     def get_log_prob(self, user_state, user_action):
         pass

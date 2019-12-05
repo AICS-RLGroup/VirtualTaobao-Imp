@@ -12,8 +12,8 @@ class MailModel:
         self.trajectory_num = trajectory_num
         self.batch_size = batch_size
 
-        self.G = RewardModel()
-        self.D = MailPolicy()
+        self.D = RewardModel()
+        self.G = MailPolicy()
 
         self.optim_G = optim.Adam(self.G.parameters(), lr=lr_g)
         self.optim_D = optim.Adam(self.D.parameters(), lr=lr_d)
