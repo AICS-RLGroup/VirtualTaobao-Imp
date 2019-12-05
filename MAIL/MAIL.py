@@ -88,6 +88,7 @@ class MailModel:
 
                 # TODO PPO update joint policy
 
+
     def save_model(self):
         torch.save(self.UserPolicy.state_dict(), './model/UserPolicy.pt')
         torch.save(self.EnginePolicy.state_dict(), './model/EnginePolicy.pt')
