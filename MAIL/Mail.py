@@ -14,7 +14,7 @@ class MailModel:
 
         self.trajectory_num = trajectory_num
         self.batch_size = batch_size
-        self.ppo_epoch = 1
+        self.ppo_epoch = ppo_epoch
         self.mini_batch_size = mini_batch_size
         self.epsilon = epsilon
         self.l2_reg = l2_reg
@@ -94,7 +94,7 @@ class MailModel:
                     for j in range(self.ppo_epoch):
                         ind = slice(j * self.mini_batch_size, min((j + 1) * self.mini_batch_size, batch_gen.shape[0]))
                         gen_state_mini, gen_action_mini, fixed_log_prob_mini, returns_mini, advantages_mini = \
-                            batch_gen_state[ind], batch_gen_action[ind], fixed_log_prob[ind,:,ind], returns[ind], advantages[
+                            batch_gen_state[ind], batch_gen_action[ind], fixed_log_prob[ind], returns[ind], advantages[
                                 ind]
 
                         PPO_step(self.G, self.V, self.optim_G, self.optim_V, gen_state_mini, gen_action_mini,

@@ -106,6 +106,6 @@ class MailPolicy(nn.Module):
 
     def get_log_prob(self, user_state, user_action):
         _, action_prob = self.get_user_action(user_state)
-        current_action_prob = action_prob[:, user_action.type(torch.long).cpu()]
+        current_action_prob = action_prob.gather(1, user_action.unsqueeze(1).type(torch.long))
 
         return torch.log(current_action_prob.unsqueeze(1))
