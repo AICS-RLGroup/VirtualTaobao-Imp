@@ -1,9 +1,8 @@
 from utils.utils import *
 
-
-def GAE(reward, value, mask, gamma, lam):
-    adv = FLOAT(reward.shape[0], 1)
-    delta = FLOAT(reward.shape[0], 1)
+def GAE(reward, mask, value, gamma, lam):
+    adv = FLOAT(reward.shape[0], 1).to(device)
+    delta = FLOAT(reward.shape[0], 1).to(device)
 
     pre_value, pre_adv = 0, 0
     for i in reversed(range(reward.shape[0])):

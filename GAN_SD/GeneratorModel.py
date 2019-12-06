@@ -23,7 +23,7 @@ class GeneratorModel(nn.Module):
     def generate(self, z=None):
         if z is None:
             z = torch.rand((1, self.dim_seed)).to(device)  # generate 1 random seed
-        x = self.get_prob_entropy(self.G(z))[0]  # softmax_feature
+        x = self.get_prob_entropy(self.generator(z))[0]  # softmax_feature
         features = [None] * 11
         features[0] = x[:, 0:8]
         features[1] = x[:, 8:16]
@@ -43,7 +43,27 @@ class GeneratorModel(nn.Module):
                                 dim=-1)  # 根据softmax feature 生成one-hot的feature
         return one_hot, features
 
+    def get_prob_entropy(self, x):
+        features = [None] * 11
+        features[0] = x[:, 0:8]
+        features[1] = x[:, 8:16]
+        features[2] = x[:, 16:27]
+        features[3] = x[:, 27:38]
+        features[4] = x[:, 38:49]
+        features[5] = x[:, 49:60]
+        features[6] = x[:, 60:62]
+        features[7] = x[:, 62:64]
+        features[8] = x[:, 64:67]
+        features[9] = x[:, 67:85]
+        features[10] = x[:, 85:88]
+        entropy = 0.0
+        softmax_feature = FLOAT([]).to(device)
+        for i in range(11):
+            softmax_feature = torch.cat([softmax_feature, F.softmax(features[i], dim=1)], dim=-1)
+            entropy += -(F.log_softmax(features[i], dim=1) * F.softmax(features[i], dim=1)).sum(dim=1).mean()
+        return softmax_feature, entropy
+
     def load(self, path=None):
         if path is None:
-            path = r'./model/user_G.pt'
-        self.generator_model.load_state_dict(torch.load(path))
+            path = r'../model/user_G.pt'
+        self.load_state_dict(torch.load(path))

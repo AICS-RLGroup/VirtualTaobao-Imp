@@ -20,7 +20,7 @@ class MailPolicy(nn.Module):
         self.dim_userleave_action = 101
 
         self.UserModel = GeneratorModel()
-        self.UserModel.load()
+        self.UserModel.to(device).load()
 
         self.EnginePolicy = nn.Sequential(
             nn.Linear(self.dim_engine_state, self.dim_engine_hidden),
@@ -37,7 +37,7 @@ class MailPolicy(nn.Module):
         )
 
         self.UserLeavePolicy = nn.Sequential(
-            nn.Linear(self.dim_user_feature, 128),
+            nn.Linear(self.dim_userleave_state, 128),
             nn.LeakyReLU(),
             nn.Linear(128, 256),
             nn.LeakyReLU(),
@@ -47,6 +47,8 @@ class MailPolicy(nn.Module):
         self.UserPolicy.apply(init_weight)
         self.EnginePolicy.apply(init_weight)
         self.UserLeavePolicy.apply(init_weight)
+
+        to_device(self.UserPolicy, self.EnginePolicy, self.UserLeavePolicy)
 
     def get_engine_action(self, engine_state):
         return self.EnginePolicy(engine_state)
@@ -58,7 +60,7 @@ class MailPolicy(nn.Module):
 
     def get_user_action(self, user_state):
         action_prob = self.get_user_action_prob(user_state)
-        action = torch.multinomial(action_prob, 1)
+        action = torch.argmax(action_prob, 1)
         return action, action_prob
 
     def get_user_leave_action(self, user):
@@ -69,8 +71,10 @@ class MailPolicy(nn.Module):
     def generate_trajectory(self, trajectory_num):
         # sample J trajectories
         trajectory = []
-        for j in range(trajectory_num):
-            tao_j = []
+        cnt = 0
+        while cnt < trajectory_num:
+            # print(f"Generating {cnt}/{trajectory_num}th trajectory.")
+            tao_j = FLOAT([]).to(device)
             # sample user from GAN-SD distribution
             s, _ = self.UserModel.generate()
             # get user's leave page index from leave model
@@ -81,21 +85,27 @@ class MailPolicy(nn.Module):
             s_c = torch.cat((s, a), dim=1)
             page_index = 1
 
-            while page_index != leave_page_index:  # terminate condition
-                s_c = torch.cat((s_c, FLOAT(page_index)).to(device), dim=1)
-                a_c = self.UserPolicy.get_action(s_c)
-                tao_j.append(torch.cat((s_c, a_c), dim=1))
+            if leave_page_index < 1:
+                continue
+            while page_index != leave_page_index + 1:  # terminate condition
+                # print(f"Generating {page_index}/{leave_page_index}th page.")
+
+                s_c = torch.cat((s_c, FLOAT([[page_index]]).to(device)), dim=1).to(device)
+                a_c, _ = self.get_user_action(s_c)
+
+                tao_j = torch.cat((tao_j,(torch.cat([s_c, a_c.type(torch.float).unsqueeze(1)], dim=1))),dim=0)
 
                 # genreate new customer state
                 a = self.EnginePolicy(s)
-                s_c = torch.cat((s, a))
+                s_c = torch.cat((s, a), dim=1)
 
                 page_index += 1
             trajectory.append(tao_j)
+            cnt += 1
         return trajectory
 
     def get_log_prob(self, user_state, user_action):
         _, action_prob = self.get_user_action(user_state)
-        current_action_prob = action_prob[:, user_action]
+        current_action_prob = action_prob[:, user_action.type(torch.long).cpu()]
 
         return torch.log(current_action_prob.unsqueeze(1))
