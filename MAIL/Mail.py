@@ -94,7 +94,12 @@ class MailModel:
                         PPO_step(self.G, self.V, self.optim_G, self.optim_V, gen_state_mini, gen_action_mini,
                                  returns_mini, advantages_mini, fixed_log_prob_mini, self.epsilon, self.l2_reg)
 
+                print(f'Epoch: {epoch}, Batch: {i}, Batch loss: {r_loss:.4f}, Batch reward: {gen_r:.4f}')
+
+            if (epoch + 1) % 10 == 0:
+                self.save_model()
+
     def save_model(self):
-        torch.save(self.G.state_dict(), r'./model/policy.pt')
-        torch.save(self.V.state_dict(), r'./model/value.pt')
-        torch.save(self.D.state_dict(), r'./model/discriminator.pt')
+        torch.save(self.G.state_dict(), r'../model/policy.pt')
+        torch.save(self.V.state_dict(), r'../model/value.pt')
+        torch.save(self.D.state_dict(), r'../model/discriminator.pt')

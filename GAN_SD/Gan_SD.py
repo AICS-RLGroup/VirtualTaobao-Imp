@@ -87,6 +87,8 @@ class GanSDModel:
                     print('Epoch %2d Batch %4d G_Loss %.3f KL %.3f D_Loss %.3f. Time elapsed: %.2fs ETA : %.2fs' % (
                         epoch, i, g_loss.cpu().detach().numpy(), kl.cpu().detach().numpy(),
                         d_loss.cpu().detach().numpy(), cur_time, eta))
+            if (epoch + 1) % 50 == 0:
+                self.save_model()
 
     # generate random user with one-hot encoded feature
     def generate(self, z=None):
@@ -155,5 +157,5 @@ class GanSDModel:
         return kl
 
     def save_model(self):
-        torch.save(self.G.state_dict(), r'./model/user_G.pt')
-        torch.save(self.D.state_dict(), r'./model/user_D.pt')
+        torch.save(self.G.state_dict(), r'../model/user_G.pt')
+        torch.save(self.D.state_dict(), r'../model/user_D.pt')
