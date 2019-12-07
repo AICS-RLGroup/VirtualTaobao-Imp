@@ -20,6 +20,7 @@ FLOAT = torch.FloatTensor
 
 device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
+
 def init_weight(m):
     if type(m) == nn.Linear:
         size = m.weight.size()
