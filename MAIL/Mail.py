@@ -8,7 +8,7 @@ from utils.utils import *
 
 
 class MailModel:
-    def __init__(self, expert_data, lr_d=0.0001, lr_g=0.0005, lr_v=0.0001, trajectory_num=300, batch_size=32,
+    def __init__(self, expert_data, lr_d=0.0001, lr_g=0.0005, lr_v=0.0001, trajectory_num=300, batch_size=64,
                  ppo_epoch=16, mini_batch_size=64, epsilon=0.1, l2_reg=1e-4):
         self.expert_data = expert_data
 
@@ -91,14 +91,14 @@ class MailModel:
                         batch_gen[:, :-1][new_index].clone(), batch_gen[:, -1][new_index].clone(), \
                         fixed_log_prob[new_index].clone(), returns[new_index].clone(), advantages[new_index].clone()
 
-                    for j in range(self.ppo_epoch):
-                        ind = slice(j * self.mini_batch_size, min((j + 1) * self.mini_batch_size, batch_gen.shape[0]))
-                        gen_state_mini, gen_action_mini, fixed_log_prob_mini, returns_mini, advantages_mini = \
-                            batch_gen_state[ind], batch_gen_action[ind], fixed_log_prob[ind], returns[ind], advantages[
-                                ind]
+                    # for j in range(self.ppo_epoch):
+                    #     ind = slice(j * self.mini_batch_size, min((j + 1) * self.mini_batch_size, batch_gen.shape[0]))
+                    #     gen_state_mini, gen_action_mini, fixed_log_prob_mini, returns_mini, advantages_mini = \
+                    #         batch_gen_state[ind], batch_gen_action[ind], fixed_log_prob[ind], returns[ind], advantages[
+                    #             ind]
 
-                        PPO_step(self.G, self.V, self.optim_G, self.optim_V, gen_state_mini, gen_action_mini,
-                                 returns_mini, advantages_mini, fixed_log_prob_mini, self.epsilon, self.l2_reg)
+                    PPO_step(self.G, self.V, self.optim_G, self.optim_V, batch_gen_state, batch_gen_action,
+                                 returns, advantages, fixed_log_prob, self.epsilon, self.l2_reg)
 
                 writer.add_scalars('MAIL/train_loss', {'Batch_R_loss': r_loss,
                                                          'Batch_reward': gen_r.mean()},
