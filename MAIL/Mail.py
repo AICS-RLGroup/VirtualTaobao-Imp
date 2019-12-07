@@ -8,7 +8,7 @@ from utils.utils import *
 
 
 class MailModel:
-    def __init__(self, expert_data, lr_d=0.0001, lr_g=0.0005, lr_v=0.0001, trajectory_num=300, batch_size=128,
+    def __init__(self, expert_data, lr_d=0.0001, lr_g=0.0005, lr_v=0.0001, trajectory_num=300, batch_size=64,
                  ppo_epoch=16, mini_batch_size=64, epsilon=0.1, l2_reg=1e-4):
         self.expert_data = expert_data
 
