@@ -38,7 +38,7 @@ class MailModel:
         for epoch in range(100):
             for i in range(batch_num):
 
-                trajectory = self.G.generate_trajectory(self.trajectory_num)
+                trajectory = self.G.generate_trajectory(self.batch_size)
 
                 # sample gen trajectories
                 batch_gen_old = random.sample(trajectory, self.batch_size)
@@ -100,11 +100,13 @@ class MailModel:
 
                 with torch.no_grad():
                     gen_r = self.D(batch_gen)
-                writer.add_scalars('MAIL/train_loss', {'Batch_R_loss': r_loss,
-                                                       'Batch_G_reward': gen_r.mean(),
-                                                       'Batch_E_reward': expert_o.mean()
-                                                       },
+                writer.add_scalars('MAIL/train_loss',
+                                   {'Batch_R_loss': r_loss,
+                                    'Batch_G_reward': gen_r.mean(),
+                                    'Batch_E_reward': expert_o.mean()
+                                    },
                                    epoch * batch_num + i)
+
                 print(f'Epoch: {epoch}, Batch: {i}, Batch loss: {r_loss.cpu().detach().numpy():.4f}, '
                       f'Batch reward: {gen_r.mean().cpu().detach().numpy():.4f}')
 

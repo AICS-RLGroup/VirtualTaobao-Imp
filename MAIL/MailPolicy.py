@@ -70,6 +70,7 @@ class MailPolicy(nn.Module):
 
     def generate_trajectory(self, trajectory_num):
         # sample J trajectories
+        ounoise = OUNoise()
         trajectory = []
         cnt = 0
         while cnt < trajectory_num:
@@ -81,8 +82,9 @@ class MailPolicy(nn.Module):
             leave_page_index = self.get_user_leave_action(s)
             # get engine action from user with request
             a = self.EnginePolicy(s)
-
+            a += torch.Tensor(ounoise.noise()).to(device)
             s_c = torch.cat((s, a), dim=1)
+
             page_index = 1
 
             if leave_page_index < 1:
@@ -97,6 +99,7 @@ class MailPolicy(nn.Module):
 
                 # genreate new customer state
                 a = self.EnginePolicy(s)
+                a += torch.Tensor(ounoise.noise()).to(device)
                 s_c = torch.cat((s, a), dim=1)
 
                 page_index += 1
@@ -109,3 +112,22 @@ class MailPolicy(nn.Module):
         current_action_prob = action_prob.gather(1, user_action.unsqueeze(1).type(torch.long))
 
         return torch.log(current_action_prob.unsqueeze(1))
+
+class OUNoise:
+    def __init__(self, action_dimension=27, scale=0.1, mu=0, theta=0.15, sigma=0.2):
+        self.action_dimension = action_dimension
+        self.scale = scale
+        self.mu = mu
+        self.theta = theta
+        self.sigma = sigma
+        self.state = np.ones(self.action_dimension) * self.mu
+        self.reset()
+
+    def reset(self):
+        self.state = np.ones(self.action_dimension) * self.mu
+
+    def noise(self):
+        x = self.state
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(len(x))
+        self.state = x + dx
+        return self.state * self.scale
