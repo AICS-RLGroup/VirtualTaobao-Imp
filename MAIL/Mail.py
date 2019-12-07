@@ -8,7 +8,7 @@ from utils.utils import *
 
 
 class MailModel:
-    def __init__(self, expert_data, lr_d=0.0001, lr_g=0.0005, lr_v=0.0001, trajectory_num=300, batch_size=64,
+    def __init__(self, expert_data, lr_d=0.0001, lr_g=0.0005, lr_v=0.0001, trajectory_num=300, batch_size=128,
                  ppo_epoch=16, mini_batch_size=64, epsilon=0.1, l2_reg=1e-4):
         self.expert_data = expert_data
 
@@ -38,7 +38,7 @@ class MailModel:
         for epoch in range(100):
             for i in range(batch_num):
 
-                trajectory = self.G.generate_trajectory(self.trajectory_num)
+                trajectory = self.G.generate_trajectory(self.batch_size)
 
                 # sample gen trajectories
                 batch_gen_old = random.sample(trajectory, self.batch_size)
@@ -101,7 +101,8 @@ class MailModel:
                                  returns, advantages, fixed_log_prob, self.epsilon, self.l2_reg)
 
                 writer.add_scalars('MAIL/train_loss', {'Batch_R_loss': r_loss,
-                                                         'Batch_reward': gen_r.mean()},
+                                                         'Batch_G_reward': gen_r.mean(),
+                                                       'Batch_E_reward': expert_o.mean()},
                                    epoch * batch_num + i)
                 print(f'Epoch: {epoch}, Batch: {i}, Batch loss: {r_loss.cpu().detach().numpy():.4f}, Batch reward: {gen_r.mean().cpu().detach().numpy():.4f}')
 
