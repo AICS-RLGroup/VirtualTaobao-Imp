@@ -96,15 +96,18 @@ class MailModel:
                     #             ind]
 
                     PPO_step(self.G, self.V, self.optim_G, self.optim_V, batch_gen_state, batch_gen_action,
-                                 returns, advantages, fixed_log_prob, self.epsilon, self.l2_reg)
+                             -torch.log(1 - returns + 1e-6), advantages, fixed_log_prob, self.epsilon, self.l2_reg)
 
+                with torch.no_grad():
+                    gen_r = self.D(batch_gen)
                 writer.add_scalars('MAIL/train_loss', {'Batch_R_loss': r_loss,
-                                                       'Batch_reward': gen_r.mean()},
+                                                       'Batch_G_reward': gen_r.mean(),
+                                                       'Batch_E_reward': expert_o.mean()
+                                                       },
                                    epoch * batch_num + i)
                 print(f'Epoch: {epoch}, Batch: {i}, Batch loss: {r_loss.cpu().detach().numpy():.4f}, '
                       f'Batch reward: {gen_r.mean().cpu().detach().numpy():.4f}')
 
-            # if (epoch + 1) % 1 == 0:
             self.save_model()
 
     def save_model(self):
