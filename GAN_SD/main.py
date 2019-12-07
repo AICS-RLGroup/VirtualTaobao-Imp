@@ -31,6 +31,7 @@ def main(dataset_path, dim_seed, batch_size, lr_g, lr_d, alpha, beta, seed):
     model = GanSDModel(dim_user, dim_seed, lr_g, lr_d, expert_user_features, batch_size=batch_size, alpha=alpha,
                        beta=beta)
     model.train()
+    model.save_model()
 
 
 if __name__ == '__main__':

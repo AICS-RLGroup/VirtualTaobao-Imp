@@ -25,6 +25,7 @@ def main(dataset_path, seed):
     torch.cuda.manual_seed(seed)
     model = MailModel(expert_user_trajectory)
     model.train()
+    model.save_model()
 
 
 if __name__ == '__main__':

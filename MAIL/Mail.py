@@ -46,22 +46,20 @@ class MailModel:
                 # sample expert trajectories
                 idx = torch.randperm(len(self.expert_data))
 
-                batch_expert_old = [self.expert_data[int(id)] for id in idx[i * self.batch_size:(i + 1) * self.batch_size]]
+                batch_expert_old = [self.expert_data[int(id)] for id in
+                                    idx[i * self.batch_size:(i + 1) * self.batch_size]]
 
                 # transform to 2D tensor
                 batch_gen = FLOAT([]).to(device)
                 batch_expert = FLOAT([])
                 mask = INT([]).to(device)
                 for g, e in zip(batch_gen_old, batch_expert_old):
-
                     batch_gen = torch.cat([batch_gen, g], dim=0)
                     batch_expert = torch.cat([batch_expert, e], dim=0)
 
                     temp_mask = torch.ones(g.shape[0], dtype=torch.int).to(device)
                     temp_mask[g.shape[0] - 1] = 0
                     mask = torch.cat([mask, temp_mask], dim=0)
-
-
 
                 # gradient ascent update Reward
                 for _ in range(1):
@@ -101,9 +99,10 @@ class MailModel:
                                  returns_mini, advantages_mini, fixed_log_prob_mini, self.epsilon, self.l2_reg)
 
                 writer.add_scalars('MAIL/train_loss', {'Batch_R_loss': r_loss,
-                                                         'Batch_reward': gen_r.mean()},
+                                                       'Batch_reward': gen_r.mean()},
                                    epoch * batch_num + i)
-                print(f'Epoch: {epoch}, Batch: {i}, Batch loss: {r_loss.cpu().detach().numpy():.4f}, Batch reward: {gen_r.mean().cpu().detach().numpy():.4f}')
+                print(f'Epoch: {epoch}, Batch: {i}, Batch loss: {r_loss.cpu().detach().numpy():.4f}, '
+                      f'Batch reward: {gen_r.mean().cpu().detach().numpy():.4f}')
 
             # if (epoch + 1) % 1 == 0:
             self.save_model()
