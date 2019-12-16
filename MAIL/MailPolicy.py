@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # Created at 2019/12/5 下午2:59
 from GAN_SD.GeneratorModel import GeneratorModel
+from utils.replay_memory import Memory
 from utils.utils import *
 
 
@@ -48,6 +49,8 @@ class MailPolicy(nn.Module):
         self.EnginePolicy.apply(init_weight)
         self.UserLeavePolicy.apply(init_weight)
 
+        self.memory = Memory()
+
         to_device(self.UserPolicy, self.EnginePolicy, self.UserLeavePolicy)
 
     def get_engine_action(self, engine_state):
@@ -68,66 +71,69 @@ class MailPolicy(nn.Module):
         leave_page_index = torch.multinomial(F.softmax(x, dim=1), 1)
         return leave_page_index
 
-    def generate_trajectory(self, trajectory_num):
-        # sample J trajectories
-        ounoise = OUNoise()
-        trajectory = []
-        cnt = 0
-        while cnt < trajectory_num:
-            # print(f"Generating {cnt}/{trajectory_num}th trajectory.")
-            tao_j = FLOAT([]).to(device)
+    def generate_batch(self, mini_batch_size=5000):
+        """
+        generate enough (state, action) pairs into memory, at least min_batch_size items.
+        ######################
+        notice for one trajectory, plat_state and plat_action never change(may cause some questions)
+        ######################
+        :param mini_batch_size: steps to
+        :return: None
+        """
+        self.memory.clear()
+
+        num_items = 0  # count generated (state, action) pairs
+
+        while num_items < mini_batch_size:
             # sample user from GAN-SD distribution
-            s, _ = self.UserModel.generate()
+            plat_state, _ = self.UserModel.generate()
+
             # get user's leave page index from leave model
-            leave_page_index = self.get_user_leave_action(s)
-            # get engine action from user with request
-            a = self.EnginePolicy(s)
-            a += torch.Tensor(ounoise.noise()).to(device)
-            s_c = torch.cat((s, a), dim=1)
+            leave_page_index = self.get_user_leave_action(plat_state)
 
-            page_index = 1
+            page_index = 1  # record page_index
 
-            if leave_page_index < 1:
-                continue
-            while page_index != leave_page_index + 1:  # terminate condition
-                # print(f"Generating {page_index}/{leave_page_index}th page.")
+            while page_index != leave_page_index + 1:
+                # get engine action from user with request
+                plat_action = self.EnginePolicy(plat_state)
 
-                s_c = torch.cat((s_c, FLOAT([[page_index]]).to(device)), dim=1).to(device)
-                a_c, _ = self.get_user_action(s_c)
+                # concat platform state and action
+                plat_state_action = torch.cat([plat_state, plat_action], dim=1)
 
-                tao_j = torch.cat((tao_j,(torch.cat([s_c, a_c.type(torch.float).unsqueeze(1)], dim=1))),dim=0)
+                # customer state --> (plat_state, plat_action, page_index)
+                state = torch.cat([plat_state_action, FLOAT([[page_index]]).to(device)], dim=1)
+                action, _ = self.get_user_action(state)
+                mask = 1 if leave_page_index == page_index else 0
 
-                # genreate new customer state
-                a = self.EnginePolicy(s)
-                a += torch.Tensor(ounoise.noise()).to(device)
-                s_c = torch.cat((s, a), dim=1)
-
+                # add to memory
+                self.memory.push(state.detach().cpu().numpy(), action.detach().cpu().numpy(), mask)
                 page_index += 1
-            trajectory.append(tao_j)
-            cnt += 1
-        return trajectory
+
+            num_items += leave_page_index
+
+    def sample_batch(self, batch_size):
+        """
+        sample batch generate (state, action) pairs with mask.
+        :param batch_size: mini_batch for update Discriminator
+        :return: batch_gen, batch_mask
+        """
+        batch_gen = FLOAT([]).to(device)
+        # sample batch (state, action) pairs from memory
+        batch = self.memory.sample(batch_size)
+
+        batch_state = FLOAT(np.stack(batch.state)).squeeze(1).to(device)
+        batch_action = FLOAT(np.stack(batch.action)).to(device)
+        batch_mask = INT(np.stack(batch.mask)).to(device)
+
+        assert batch_state.size(0) == batch_size, "Expected batch size (s,a) pairs"
+
+        batch_gen = torch.cat([batch_gen, batch_state], dim=1)
+        batch_gen = torch.cat([batch_gen, batch_action], dim=1)
+
+        return batch_gen, batch_mask
 
     def get_log_prob(self, user_state, user_action):
         _, action_prob = self.get_user_action(user_state)
         current_action_prob = action_prob.gather(1, user_action.unsqueeze(1).type(torch.long))
 
         return torch.log(current_action_prob.unsqueeze(1))
-
-class OUNoise:
-    def __init__(self, action_dimension=27, scale=0.1, mu=0, theta=0.15, sigma=0.2):
-        self.action_dimension = action_dimension
-        self.scale = scale
-        self.mu = mu
-        self.theta = theta
-        self.sigma = sigma
-        self.state = np.ones(self.action_dimension) * self.mu
-        self.reset()
-
-    def reset(self):
-        self.state = np.ones(self.action_dimension) * self.mu
-
-    def noise(self):
-        x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(len(x))
-        self.state = x + dx
-        return self.state * self.scale

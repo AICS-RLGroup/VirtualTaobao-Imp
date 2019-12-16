@@ -1,5 +1,12 @@
 from utils.utils import *
 
+grad_map = {}
+
+
+def hook_grad(key, value):
+    grad_map[key] = value
+
+
 def GAE(reward, mask, value, gamma, lam):
     adv = FLOAT(reward.shape[0], 1).to(device)
     delta = FLOAT(reward.shape[0], 1).to(device)
@@ -16,13 +23,16 @@ def GAE(reward, mask, value, gamma, lam):
     return adv, returns
 
 
-def PPO_step(policy_net, value_net, policy_optim, value_optim, state, action, returns, advantage, old_log_prob,
+def PPO_step(policy_net, value_net, policy_optim, value_optim, state, action, returns, advantage,
+             old_log_prob,
              epsilon, l2_reg):
     value_optim.zero_grad()
     value_o = value_net(state.detach())
     v_loss = (value_o - returns.detach()).pow(2).mean()
     for param in value_net.parameters():
         v_loss += param.pow(2).sum() * l2_reg
+
+    v_loss.register_hook(lambda grad: hook_grad("v_loss", grad))
     v_loss.backward()
     value_optim.step()
 
@@ -32,7 +42,11 @@ def PPO_step(policy_net, value_net, policy_optim, value_optim, state, action, re
     surr1 = ratio * advantage
     surr2 = torch.clamp(ratio, 1 - epsilon, 1 + epsilon) * advantage
     p_loss = -torch.min(surr1, surr2).mean()
+
+    p_loss.register_hook(lambda grad: hook_grad("p_loss", grad))
+
     p_loss.backward()
     torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 40)
     policy_optim.step()
+
     return v_loss, p_loss
