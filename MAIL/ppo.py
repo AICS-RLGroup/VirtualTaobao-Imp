@@ -46,7 +46,7 @@ def PPO_step(policy_net, value_net, policy_optim, value_optim, state, action, re
     p_loss.register_hook(lambda grad: hook_grad("p_loss", grad))
 
     p_loss.backward()
-    torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 40)
+    torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 10)
     policy_optim.step()
 
     return v_loss, p_loss

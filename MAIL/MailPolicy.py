@@ -117,23 +117,19 @@ class MailPolicy(nn.Module):
         :param batch_size: mini_batch for update Discriminator
         :return: batch_gen, batch_mask
         """
-        batch_gen = FLOAT([]).to(device)
         # sample batch (state, action) pairs from memory
         batch = self.memory.sample(batch_size)
 
         batch_state = FLOAT(np.stack(batch.state)).squeeze(1).to(device)
-        batch_action = FLOAT(np.stack(batch.action)).to(device)
+        batch_action = LONG(np.stack(batch.action)).to(device)
         batch_mask = INT(np.stack(batch.mask)).to(device)
 
         assert batch_state.size(0) == batch_size, "Expected batch size (s,a) pairs"
 
-        batch_gen = torch.cat([batch_gen, batch_state], dim=1)
-        batch_gen = torch.cat([batch_gen, batch_action], dim=1)
-
-        return batch_gen, batch_mask
+        return batch_state, batch_action, batch_mask
 
     def get_log_prob(self, user_state, user_action):
         _, action_prob = self.get_user_action(user_state)
-        current_action_prob = action_prob.gather(1, user_action.unsqueeze(1).type(torch.long))
+        current_action_prob = action_prob.gather(1, user_action)
 
         return torch.log(current_action_prob.unsqueeze(1))
