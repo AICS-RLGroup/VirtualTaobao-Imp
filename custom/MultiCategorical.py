@@ -5,25 +5,26 @@ from functools import reduce
 from typing import List
 
 import torch
-from torch.distributions import OneHotCategorical
+from torch.distributions import Categorical
 
 
-class MultiOneHotCategorical(OneHotCategorical):
+class MultiCategorical(Categorical):
     """
-        customized distribution to deal with multiple one-hot categorical data
+        customized distribution to deal with multiple categorical data
         Example::
 
-        >>> m = MultiOneHotCategorical(torch.tensor([[0.3, 0.2, 0.4, 0.1, 0.25, 0.5, 0.25, 0.3, 0.4, 0.1, 0.1, 0.1],
+        >>> m = MultiCategorical(torch.tensor([[0.3, 0.2, 0.4, 0.1, 0.25, 0.5, 0.25, 0.3, 0.4, 0.1, 0.1, 0.1],
                                         [0.2, 0.3, 0.1, 0.4, 0.5, 0.3, 0.2, 0.2, 0.3, 0.2, 0.2, 0.1]]), [4, 3, 5])
         >>> m.sample()
-        tensor([[1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 1.],
-                [0., 1., 0., 0., 1., 0., 0., 0., 0., 0., 1., 0.]])
+        tensor([[0, 1, 4],
+                [1, 0, 3]])
+
 
     """
 
     def __init__(self, probs: torch.Tensor, sections: List[int]):
         self._sections = sections
-        self._dists = [OneHotCategorical(x) for x in torch.split(probs, sections, dim=-1)]
+        self._dists = [Categorical(x) for x in torch.split(probs, sections, dim=-1)]
 
     def sample(self, sample_shape=torch.Size()):
         """
@@ -31,12 +32,12 @@ class MultiOneHotCategorical(OneHotCategorical):
         :param sample_shape:
         :return: [sample_dist1, sample_dist2, ...]
         """
-        res = torch.cat([dist.sample() for dist in self._dists], dim=-1)
+        res = torch.cat([dist.sample().unsqueeze(-1) for dist in self._dists], dim=-1)
         return res
 
     def log_prob(self, value):
-        values = torch.split(value, self._sections, dim=-1)
-        log_probs = [dist.log_prob(v) for dist, v in zip(self._dists, values)]
+        values = torch.split(value, 1, dim=-1)
+        log_probs = [dist.log_prob(v.squeeze()) for dist, v in zip(self._dists, values)]
         return reduce(torch.add, log_probs)
 
     def entropy(self):
