@@ -1,15 +1,15 @@
 import math
 
-from algorithms.ppo import GAE, PPO_step
 from WebEye.discriminator import Discriminator
 from WebEye.policy import Policy
 from WebEye.value import Value
+from algorithms.ppo import GAE, PPO_step
 from utils.utils import *
 
 
 class WebEyeModel:
-    def __init__(self, expert_data, lr_d=1e-4, lr_g=3e-4, lr_v=1e-3, epochs=200000, batch_size=64, ppo_epoch=10,
-                 ppo_minibatch_size=8, epsilon=0.2, l2_reg=1e-4):
+    def __init__(self, expert_data, lr_d=1e-4, lr_g=3e-4, lr_v=1e-3, epochs=200000, batch_size=2000, ppo_epoch=2,
+                 ppo_minibatch_size=500, epsilon=0.2, l2_reg=1e-4):
         self.expert_data = expert_data
 
         self.epochs = epochs
@@ -39,7 +39,7 @@ class WebEyeModel:
             # shuffle expert data
             idx = torch.randperm(len(self.expert_data))
             # generate (state, action) pairs
-            expert_state_action_num = 1024
+            expert_state_action_num = 5000
             self.G.generate_batch(expert_state_action_num, self.expert_data)
             # sample generated (state, action) pairs from memory
             batch_gen_state, batch_gen_action, mask = self.G.sample_batch(self.batch_size)
@@ -72,32 +72,28 @@ class WebEyeModel:
 
                     self.optim_D.step()
 
-                writer.add_scalars('WebEye/Discriminator',
-                                   {'Batch_D_loss': d_loss,
-                                    'Batch_G_loss': g_loss,
-                                    'Batch_E_loss': e_loss
-                                    },
-                                   epoch * batch_num + i)
+                writer.add_scalars('WebEye/Discriminator', {'Batch_D_loss': d_loss.item(),
+                                                            'Batch_G_loss': g_loss.item(),
+                                                            'Batch_E_loss': e_loss.item()
+                                                            }, epoch * batch_num + i)
 
-                writer.add_scalars('WebEye/Reward',
-                                   {'Batch_G_reward': gen_o.mean(),
-                                    'Batch_E_reward': expert_o.mean()
-                                    },
-                                   epoch * batch_num + i)
+                writer.add_scalars('WebEye/Reward', {'Batch_G_reward': gen_o.mean().item(),
+                                                     'Batch_E_reward': expert_o.mean().item()
+                                                     }, epoch * batch_num + i)
                 print("=" * 100 + "Discriminator")
 
                 print(f'Epoch: {epoch}, Batch: {i}, Batch E loss: {e_loss.detach().cpu().numpy():.4f}, '
-                      f'Batch G loss: {g_loss.cpu().detach().numpy(): .4f}, '
-                      f'Batch D loss: {d_loss.cpu().detach().numpy(): .4f}, '
-                      f'Batch G reward: {gen_o.mean().cpu().detach().numpy():.4f}, '
-                      f'Batch E reward: {expert_o.mean().detach().cpu().numpy(): .4f}')
+                      f'Batch G loss: {g_loss.item(): .4f}, '
+                      f'Batch D loss: {d_loss.item(): .4f}, '
+                      f'Batch G reward: {gen_o.mean().item():.4f}, '
+                      f'Batch E reward: {expert_o.mean().item(): .4f}')
 
             with torch.no_grad():
                 gen_r = self.D(torch.cat([batch_gen_state, batch_gen_action.type(torch.float)], dim=1).to(device))
                 value_o = self.V(batch_gen_state)
                 fixed_log_prob = self.G.get_log_prob(batch_gen_state, batch_gen_action)
 
-            advantages, returns = GAE(-torch.log(1 - gen_r + 1e-6), mask, value_o, gamma=0.99, lam=0.96)
+            advantages, returns = GAE(gen_r, mask, value_o, gamma=0.99, lam=0.96)
 
             ##############################
             # update Generator using PPO
@@ -118,20 +114,17 @@ class WebEyeModel:
                         mini_batch_gen_state[ind], mini_batch_gen_action[ind], mini_batch_advantages[ind], \
                         mini_batch_returns[ind], mini_batch_fixed_log_prob[ind]
 
-                    v_loss, p_loss = PPO_step(self.G, self.V, self.optim_G, self.optim_V, states_b,
-                                              actions_b,
-                                              returns_b, advantages_b, fixed_log_probs_b,
-                                              self.epsilon, self.l2_reg)
+                    v_loss, p_loss = PPO_step(self.G, self.V, self.optim_G, self.optim_V, states_b, actions_b,
+                                              returns_b, advantages_b, fixed_log_probs_b, self.epsilon, self.l2_reg)
 
                 writer.add_scalars('WebEye/Generator',
                                    {'Batch_V_loss': v_loss,
                                     'Batch_P_loss': p_loss
-                                    },
-                                   epoch * self.ppo_epoch + k)
+                                    }, epoch * self.ppo_epoch + k)
 
                 print("=" * 100 + "Generator")
-                print(f'Epoch: {epoch}, Batch V loss: {v_loss.detach().cpu().numpy():.4f}, '
-                      f'Batch P loss: {p_loss.detach().cpu().numpy(): .10f}'
+                print(f'Epoch: {epoch}, Batch V loss: {v_loss.item():.4f}, '
+                      f'Batch P loss: {p_loss.item(): .10f}'
                       )
 
             self.save_model()

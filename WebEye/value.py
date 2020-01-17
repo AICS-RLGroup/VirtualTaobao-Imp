@@ -7,6 +7,10 @@ class Value(nn.Module):
         self.model = nn.Sequential(
             nn.Linear(dim_user_state_action, dim_hidden),
             activation(),
+            nn.Linear(dim_hidden, dim_hidden),
+            activation(),
+            nn.Linear(dim_hidden, dim_hidden),
+            activation(),
             nn.Linear(dim_hidden, dim_out)
         )
 

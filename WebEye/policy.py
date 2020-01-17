@@ -3,23 +3,21 @@
 # Created at 2020/1/2 下午4:17
 import random
 
-from torch.distributions import Normal, OneHotCategorical
+from torch.distributions import MultivariateNormal
 
+from custom.MultiOneHotCategorical import MultiOneHotCategorical
+from custom.MultiSoftMax import MultiSoftMax
 from utils.replay_memory import Memory
 from utils.utils import *
 
 # 离散 action 对应
 action_sizes = [5, 2, 4, 3, 2, 9, 2, 32, 35, 7, 2, 21, 2, 3, 3]
-n_actions = len(action_sizes)
-action_sizes_cum = np.cumsum(action_sizes)
-action_slices = [slice(action_sizes_cum[i] - action_sizes[i], action_sizes_cum[i]) for i in
-                 range(n_actions)]
 
 
 # (s, a) -> s'
 class EnvPolicy(nn.Module):
     def __init__(self, dim_state_continuous=23, dim_state_disc=132, dim_action=6, dim_hidden=256,
-                 activation=nn.LeakyReLU):
+                 activation=nn.LeakyReLU, log_std=0.0):
         super(EnvPolicy, self).__init__()
 
         self.dim_state_continuous = dim_state_continuous
@@ -33,8 +31,14 @@ class EnvPolicy(nn.Module):
             activation()
         )
 
-        self.action_disc = nn.Linear(self.dim_hidden, self.dim_state_disc)
-        self.action_continuous = nn.Linear(self.dim_hidden, self.dim_state_continuous * 2)
+        # predict discrete action using custom softmax
+        self.action_disc = nn.Sequential(
+            nn.Linear(self.dim_hidden, self.dim_state_disc),
+            MultiSoftMax(0, self.dim_state_disc, action_sizes))
+
+        # predict mean and std for continuous action
+        self.action_continuous_mean = nn.Linear(self.dim_hidden, self.dim_state_continuous)
+        self.action_continuous_log_std = nn.Parameter(torch.ones(1, self.dim_state_continuous) * log_std)
 
     def forward(self, x):
         """
@@ -43,36 +47,27 @@ class EnvPolicy(nn.Module):
         """
         x = self.common(x)
         action_disc = self.action_disc(x)
-        action_continuous = self.action_continuous(x)
-        action_continuous_mean, action_continuous_std = action_continuous[:, :self.dim_state_continuous], \
-                                                        action_continuous[:, self.dim_state_continuous:]
-        action_continuous_mean = torch.clamp(action_continuous_mean, -1, 1)
-        action_continuous_std = torch.clamp(action_continuous_std, 0, 1)
-        return action_disc, action_continuous_mean, action_continuous_std
+        action_continuous_mean = self.action_continuous(x)
+        action_continuous_log_std = self.action_continuous_log_std.expand_as(action_continuous_mean)
+        return action_disc, action_continuous_mean, action_continuous_log_std
 
-    @staticmethod
-    def get_softmax_disc_action(x):
-        # 15个one-hot向量拼接而成，大小分别是
-        action_disc = [None] * n_actions
-        for i in range(n_actions):
-            action_disc[i] = x[:, action_slices[i]]
-
-        soft_max_action = FLOAT([]).to(device)
-        one_hot_action = FLOAT([]).to(device)
-
-        for i in range(n_actions):
-            soft_max_action = torch.cat((soft_max_action, F.softmax(action_disc[i], dim=1).to(device)), dim=-1)
-            tmp = torch.zeros_like(action_disc[i]).to(device)
-            one_hot_action = torch.cat(
-                (one_hot_action, tmp.scatter_(1, torch.multinomial(F.softmax(action_disc[i], dim=1), 1), 1)),
-                dim=-1)  # 根据softmax feature 生成one-hot的feature
-        return soft_max_action, one_hot_action
+    def get_onehot_disc_action(self, x):
+        """
+        get softmax discrete action
+        :param x: multi categorical probs
+        :return:
+        """
+        # 15个one-hot向量拼接而成，大小分别是 [5, 2, 4, 3, 2, 9, 2, 32, 35, 7, 2, 21, 2, 3, 3]
+        m = MultiOneHotCategorical(x, action_sizes)
+        return m.sample()
 
     def get_action(self, x):
-        action_disc, action_continuous_mean, action_continuous_std = self.forward(x)
-        softmax_disc_action, action_disc = self.get_softmax_disc_action(action_disc)
-        normal_dist = Normal(action_continuous_mean, action_continuous_std)
-        action_continuous = normal_dist.rsample()
+        action_disc_probs, action_continuous_mean, action_continuous_log_std = self.forward(x)
+        action_disc = self.get_onehot_disc_action(action_disc_probs)
+
+        action_continuous_std = action_continuous_log_std.exp()
+        multi_normal_dist = MultivariateNormal(action_continuous_mean, torch.diag_embed(action_continuous_std))
+        action_continuous = multi_normal_dist.rsample()
 
         action = torch.cat([action_disc, action_continuous], dim=-1)
         return action
@@ -81,36 +76,36 @@ class EnvPolicy(nn.Module):
 # s -> a
 class AgentPolicy(nn.Module):
     def __init__(self, dim_state=155, dim_action=6, dim_hidden=128,
-                 activation=nn.LeakyReLU):
+                 activation=nn.LeakyReLU, log_std=0.0):
         super(AgentPolicy, self).__init__()
 
         self.dim_state = dim_state
         self.dim_action = dim_action
         self.dim_hidden = dim_hidden
 
-        self.common = nn.Sequential(
+        self.action = nn.Sequential(
             nn.Linear(self.dim_state, self.dim_hidden),
-            activation()
+            activation(),
+            nn.Linear(self.dim_hidden, self.dim_action)
         )
 
-        self.action = nn.Linear(self.dim_hidden, self.dim_action * 2)
+        self.action_log_std = nn.Parameter(torch.ones(1, self.dim_action) * log_std)
 
     def forward(self, x):
         """
         :param x: state
         :return: action
         """
-        x = self.common(x)
-        action = self.action(x)
-        action_mean, action_std = action[:, :self.dim_action], action[:, self.dim_action:]
-        action_mean = torch.clamp(action_mean, -1, 1)
-        action_std = torch.clamp(action_std, 0, 1)
-        return action_mean, action_std
+        action_mean = self.action(x)
+        action_log_std = self.action_log_std.expand_as(action_mean)
+        return action_mean, action_log_std
 
     def get_action(self, x):
-        action_mean, action_std = self.forward(x)
-        normal = Normal(action_mean, action_std)
-        action = normal.rsample()
+        action_mean, action_log_std = self.forward(x)
+        action_std = action_log_std.exp()
+
+        multi_normal = MultivariateNormal(action_mean, torch.diag_embed(action_std))
+        action = multi_normal.rsample()
         return action
 
 
@@ -149,7 +144,7 @@ class Policy(nn.Module):
         state = expert_data[traj_idx, :self.dim_state]
         return state.unsqueeze(0).to(device)
 
-    def generate_batch(self, mini_batch_size, expert_data, traj_lens=10):
+    def generate_batch(self, mini_batch_size, expert_data, traj_length=10):
         """
         generate enough (state, action) pairs into memory, at least min_batch_size items.
         ######################
@@ -165,7 +160,7 @@ class Policy(nn.Module):
         while num_items < mini_batch_size:
             agent_action = self.get_agent_action(env_state)
             env_next_state = self.get_env_action(env_state, agent_action)
-            mask = 1 if (num_items != 0 and num_items % traj_lens == 0) else 0
+            mask = 1 if (num_items != 0 and num_items % traj_length == 0) else 0
 
             state = torch.cat([env_state, agent_action], dim=-1).squeeze(0).detach().cpu().numpy()
             action = env_next_state.detach().cpu().numpy()
@@ -201,27 +196,21 @@ class Policy(nn.Module):
         disc = action[:, :self.dim_state_disc]
         continuous = action[:, self.dim_state_disc:]
 
-        action_disc, action_continuous_mean, action_continuous_logstd = self.EnvPolicy(state)
-        softmax_disc_action, _ = self.EnvPolicy.get_softmax_disc_action(action_disc)
-        log_prob = FLOAT([]).to(device)
-        # discrete log probability
-        for i in range(n_actions):
-            cur_m = OneHotCategorical(softmax_disc_action[:, action_slices[i]])
-            cur_log_prob = cur_m.log_prob(disc[:, action_slices[i]]).view(-1, 1)
-            log_prob = torch.cat((log_prob, cur_log_prob), dim=-1)
-        # continuous log probability
-        action_continuous_std = torch.exp(action_continuous_logstd)
-        normal_dist = Normal(action_continuous_mean, action_continuous_std)
-        continuous_log_prob = normal_dist.log_prob(continuous)
-        # concat log probability
-        log_prob = torch.cat([log_prob, continuous_log_prob], dim=-1)
+        action_disc_probs, action_continuous_mean, action_continuous_log_std = self.EnvPolicy(state)
+        action_disc_log_prob = MultiOneHotCategorical(action_disc_probs, action_sizes).log_prob(disc)
+
+        action_continuous_std = torch.exp(action_continuous_log_std)
+        normal_dist = MultivariateNormal(action_continuous_mean, torch.diag_embed(action_continuous_std))
+        action_continuous_log_prob = normal_dist.log_prob(continuous)
 
         # agent policy
         agent_state = state[:, :self.dim_state]
         agent_action = state[:, self.dim_state:]
-        mean, std = self.AgentPolicy(agent_state)
-        normal = Normal(mean, std.exp())
+        mean, log_std = self.AgentPolicy(agent_state)
+        std = log_std.exp()
+        normal = MultivariateNormal(mean, torch.diag_embed(std))
         agent_log_prob = normal.log_prob(agent_action)
 
-        log_prob = torch.cat([log_prob, agent_log_prob], dim=1)
+        print(agent_log_prob.shape, action_disc_log_prob.shape, action_continuous_log_prob.shape)
+        log_prob = agent_log_prob + action_disc_log_prob + action_continuous_log_prob
         return log_prob

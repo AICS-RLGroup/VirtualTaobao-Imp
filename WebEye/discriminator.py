@@ -8,6 +8,8 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(
             nn.Linear(n_input, n_hidden),
             activation(),
+            nn.Linear(n_hidden, n_hidden),
+            activation(),
             nn.Linear(n_hidden, n_output),
             nn.Sigmoid()
         )
